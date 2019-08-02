@@ -5,6 +5,8 @@
 var meta = require.main.require('./src/meta');
 var user = require.main.require('./src/user');
 var groups = require.main.require('./src/groups');
+var categories = module.parent.require('./categories');
+var privileges = module.parent.require('./privileges');
 var SocketPlugins = require.main.require('./src/socket.io/plugins');
 
 var winston = module.parent.require('winston');
@@ -178,14 +180,18 @@ plugin.normalizePayload = function (payload, callback) {
 		return callback(new Error('payload-invalid'));
 	}
 
-	userData.fullname = (userData.fullname || [userData.firstName, userData.lastName].join(' ')).trim();
+	if ([userData.firstName, userData.lastName].join(' ')
+		.trim().length > 0) {
+		userData.fullname = (userData.fullname || [userData.firstName, userData.lastName].join(' ')).trim();
+	}
 
-	if (!userData.username) {
+	if (!userData.username && userData.fullname.trim().length > 0) {
 		userData.username = userData.fullname;
 	}
 
 	/* strip username from illegal characters */
-	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
+	userData.username = userData.username.trim()
+		.replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
 	if (!userData.username) {
 		winston.warn('[session-sharing] No valid username could be determined');
@@ -230,7 +236,9 @@ plugin.findOrCreateUser = function (userData, callback) {
 	queries.uid = async.apply(db.sortedSetScore, plugin.settings.name + ':uid', userData.id);
 
 	async.parallel(queries, function (err, checks) {
-		if (err) { return callback(err); }
+		if (err) {
+			return callback(err);
+		}
 
 		async.waterfall([
 			/* check if found something to work with */
@@ -270,6 +278,7 @@ plugin.findOrCreateUser = function (userData, callback) {
 					}
 					return plugin.createUser(userData, function (err, uid) {
 						next(err, uid, userData, true);
+
 					});
 				}
 				setImmediate(next, null, uid, userData, false);
@@ -366,6 +375,8 @@ plugin.updateUserGroups = function (uid, userData, isNewUser, callback) {
 	], function (err) {
 		return callback(err, uid, isNewUser);
 	});
+
+
 };
 
 function executeJoinLeave(uid, join, leave, callback) {
@@ -395,9 +406,27 @@ plugin.createUser = function (userData, callback) {
 	winston.verbose('[session-sharing] No user found, creating a new user for this login');
 
 	user.create(_.pick(userData, profileFields), function (err, uid) {
-		if (err) { return callback(err); }
+		if (err) {
+			return callback(err);
+		}
 
 		db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.id, function (err) {
+			var newGroup = true;
+
+			groups.get(userData.groupTitle, {}, function (err, groupFound) {
+				if (groupFound) {
+					newGroup = false;
+				}
+			});
+
+			groups.join(userData.groupTitle, uid, function (err, groupObj) {
+				if (newGroup) {
+					groups.get(userData.groupTitle, {}, function (err, groupFound) {
+						plugin.updateGroup(groupFound);
+					});
+				}
+			});
+
 			callback(err, uid);
 		});
 	});
@@ -447,23 +476,23 @@ plugin.addMiddleware = function (req, res, next) {
 					var handleAsGuest = false;
 
 					switch (err.message) {
-					case 'banned':
-						winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
-						req.session.sessionSharing = {
-							banned: true,
-							uid: uid,
-						};
-						break;
-					case 'payload-invalid':
-						winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
-						break;
-					case 'no-match':
-						winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
-						handleAsGuest = true;
-						break;
-					default:
-						winston.warn('[session-sharing] Error encountered while parsing token: ' + err.message);
-						break;
+						case 'banned':
+							winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
+							req.session.sessionSharing = {
+								banned: true,
+								uid: uid,
+							};
+							break;
+						case 'payload-invalid':
+							winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
+							break;
+						case 'no-match':
+							winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
+							handleAsGuest = true;
+							break;
+						default:
+							winston.warn('[session-sharing] Error encountered while parsing token: ' + err.message);
+							break;
 					}
 
 					return plugins.fireHook('filter:sessionSharing.error', {
@@ -486,8 +515,7 @@ plugin.addMiddleware = function (req, res, next) {
 				req.loggedIn = true;
 				nbbAuthController.doLogin(req, uid, function () {
 					req.session.loginLock = true;
-					const url = req.session.returnTo || req.url;
-					res.redirect(nconf.get('relative_path') + encodeURI(url));
+					res.redirect(nconf.get('relative_path') + '/categories');
 					delete req.session.returnTo;
 				});
 			});
@@ -627,5 +655,100 @@ plugin.appendTemplate = (data, callback) => {
 
 	setImmediate(callback, null, data);
 };
+
+plugin.updateGroup = function (group, callback, action) {
+
+	var sharedWithAiperianName = group.name + ' & Aiperion channel';
+	var createCategoryForGroup = createCategory(group, action, createCategoryForGroup, false);
+	db.getObjectField('groupname:cid', sharedWithAiperianName, createCategoryForGroup);
+
+
+	var internalName = group.name + ' Internal Forum';
+	var createCategoryForGroup = createCategory(group, action, createCategoryForGroup, true);
+	db.getObjectField('groupname:cid', internalName, createCategoryForGroup);
+
+};
+
+function createCategory(group, action, createCategoryForGroup, sharedWithAiperion) {
+	return function (err, cid) {
+		var categoryName = sharedWithAiperion ? group.name + ' & Aiperion channel' : group.name + ' Internal Forum';
+		var description = sharedWithAiperion ?  'A place where you can ask Aiperion staff for guidance' : 'Private space for ' + group.name + ' topics';
+		var icon = sharedWithAiperion ? 'fa-users' : 'fa-desktop';
+
+		var expectedCategoryData = {
+			name: categoryName,
+			description: description,
+			slug: group.slug,
+			icon: icon,
+			bgColor: '#394B59',
+			private: true
+		};
+		if (action === 'delete') {
+			expectedCategoryData.disabled = 1;
+		}
+		if (err || !cid) {
+			categories.create(expectedCategoryData, function (err, category) {
+				db.setObjectField('groupname:cid', categoryName);
+
+				var defaultPrivileges = [
+					'find',
+					'read',
+					'topics:read',
+					'topics:create',
+					'topics:reply',
+					'topics:tag',
+					'posts:edit',
+					'posts:history',
+					'posts:delete',
+					'posts:upvote',
+					'posts:downvote',
+					'topics:delete',
+				];
+
+				if (sharedWithAiperion) {
+					privileges.categories.give(defaultPrivileges, category.cid, 'Aiperion Staff');
+				}
+				privileges.categories.give(defaultPrivileges, category.cid, group.name);
+
+
+				privileges.categories.rescind(defaultPrivileges, category.cid, 'registered-users');
+				privileges.categories.rescind(defaultPrivileges, category.cid, 'spiders');
+				privileges.categories.rescind(defaultPrivileges, category.cid, 'guests');
+
+			});
+		} else {
+			expectedCategoryData['slug'] = undefined;
+			categories.getCategoryById({ cid: cid }, function (err, category) {
+				if (typeof (category) === 'undefined') {
+					db.deleteObjectField('groupname:cid', group.name, function () {
+						createCategoryForGroup(null, null);
+					});
+					return;
+				}
+				if (category === null) {
+					return;
+				}
+				if (category.disabled) {
+					return;
+				}
+				var categoryNeedsUpdate = false;
+				for (var key in expectedCategoryData) {
+					if (expectedCategoryData[key] != category[key]) {
+						category[key] = expectedCategoryData[key];
+						categoryNeedsUpdate = true;
+					}
+				}
+				if (categoryNeedsUpdate) {
+					category.tagWhitelist = '';
+					var catUpd = {};
+					catUpd[cid] = category;
+					categories.update(catUpd, function (err) {
+					});
+				}
+			});
+		}
+	};
+}
+
 
 module.exports = plugin;
