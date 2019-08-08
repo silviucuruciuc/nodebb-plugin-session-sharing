@@ -278,7 +278,6 @@ plugin.findOrCreateUser = function (userData, callback) {
 					}
 					return plugin.createUser(userData, function (err, uid) {
 						next(err, uid, userData, true);
-
 					});
 				}
 				setImmediate(next, null, uid, userData, false);
@@ -375,8 +374,6 @@ plugin.updateUserGroups = function (uid, userData, isNewUser, callback) {
 	], function (err) {
 		return callback(err, uid, isNewUser);
 	});
-
-
 };
 
 function executeJoinLeave(uid, join, leave, callback) {
@@ -422,7 +419,7 @@ plugin.createUser = function (userData, callback) {
 			groups.join(userData.groupTitle, uid, function (err, groupObj) {
 				if (newGroup) {
 					groups.get(userData.groupTitle, {}, function (err, groupFound) {
-						plugin.updateGroup(groupFound);
+						plugin.updateGroup(userData.groupTitle);
 					});
 				}
 			});
@@ -476,23 +473,23 @@ plugin.addMiddleware = function (req, res, next) {
 					var handleAsGuest = false;
 
 					switch (err.message) {
-						case 'banned':
-							winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
-							req.session.sessionSharing = {
-								banned: true,
-								uid: uid,
-							};
-							break;
-						case 'payload-invalid':
-							winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
-							break;
-						case 'no-match':
-							winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
-							handleAsGuest = true;
-							break;
-						default:
-							winston.warn('[session-sharing] Error encountered while parsing token: ' + err.message);
-							break;
+					case 'banned':
+						winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
+						req.session.sessionSharing = {
+							banned: true,
+							uid: uid,
+						};
+						break;
+					case 'payload-invalid':
+						winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
+						break;
+					case 'no-match':
+						winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
+						handleAsGuest = true;
+						break;
+					default:
+						winston.warn('[session-sharing] Error encountered while parsing token: ' + err.message);
+						break;
 					}
 
 					return plugins.fireHook('filter:sessionSharing.error', {
@@ -656,32 +653,30 @@ plugin.appendTemplate = (data, callback) => {
 	setImmediate(callback, null, data);
 };
 
-plugin.updateGroup = function (group, callback, action) {
-
-	var sharedWithAiperianName = group.name + ' & Aiperion channel';
-	var createCategoryForGroup = createCategory(group, action, createCategoryForGroup, false);
+plugin.updateGroup = function (groupName, callback, action) {
+	var sharedWithAiperianName = groupName + ' & Aiperion channel';
+	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, false);
 	db.getObjectField('groupname:cid', sharedWithAiperianName, createCategoryForGroup);
 
 
-	var internalName = group.name + ' Internal Forum';
-	var createCategoryForGroup = createCategory(group, action, createCategoryForGroup, true);
+	var internalName = groupName + ' Internal Forum';
+	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, true);
 	db.getObjectField('groupname:cid', internalName, createCategoryForGroup);
-
 };
 
-function createCategory(group, action, createCategoryForGroup, sharedWithAiperion) {
+function createCategory(groupName, action, createCategoryForGroup, sharedWithAiperion) {
 	return function (err, cid) {
-		var categoryName = sharedWithAiperion ? group.name + ' & Aiperion channel' : group.name + ' Internal Forum';
-		var description = sharedWithAiperion ?  'A place where you can ask Aiperion staff for guidance' : 'Private space for ' + group.name + ' topics';
+		var categoryName = sharedWithAiperion ? groupName + ' & Aiperion channel' : groupName + ' Internal Forum';
+		var description = sharedWithAiperion ? 'A place where you can ask Aiperion staff for guidance' : 'Private space for ' + groupName + ' topics';
 		var icon = sharedWithAiperion ? 'fa-users' : 'fa-desktop';
 
 		var expectedCategoryData = {
 			name: categoryName,
 			description: description,
-			slug: group.slug,
+			// slug: group.slug,
 			icon: icon,
 			bgColor: '#394B59',
-			private: true
+			private: true,
 		};
 		if (action === 'delete') {
 			expectedCategoryData.disabled = 1;
@@ -708,16 +703,15 @@ function createCategory(group, action, createCategoryForGroup, sharedWithAiperio
 				if (sharedWithAiperion) {
 					privileges.categories.give(defaultPrivileges, category.cid, 'Aiperion Staff');
 				}
-				privileges.categories.give(defaultPrivileges, category.cid, group.name);
+				privileges.categories.give(defaultPrivileges, category.cid, groupName);
 
 
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'registered-users');
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'spiders');
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'guests');
-
 			});
 		} else {
-			expectedCategoryData['slug'] = undefined;
+			expectedCategoryData.slug = undefined;
 			categories.getCategoryById({ cid: cid }, function (err, category) {
 				if (typeof (category) === 'undefined') {
 					db.deleteObjectField('groupname:cid', group.name, function () {
