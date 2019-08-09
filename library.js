@@ -654,28 +654,28 @@ plugin.appendTemplate = (data, callback) => {
 };
 
 plugin.updateGroup = function (groupName, callback, action) {
-	var sharedWithAiperianName = groupName + ' & Aiperion channel';
+	var sharedWithAiperianName = 'Private channel to Aiperion';
 	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, false);
 	db.getObjectField('groupname:cid', sharedWithAiperianName, createCategoryForGroup);
 
 
-	var internalName = groupName + ' Internal Forum';
+	var internalName = ' Internal workspace forum';
 	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, true);
 	db.getObjectField('groupname:cid', internalName, createCategoryForGroup);
 };
 
 function createCategory(groupName, action, createCategoryForGroup, sharedWithAiperion) {
 	return function (err, cid) {
-		var categoryName = sharedWithAiperion ? groupName + ' & Aiperion channel' : groupName + ' Internal Forum';
-		var description = sharedWithAiperion ? 'A place where you can ask Aiperion staff for guidance' : 'Private space for ' + groupName + ' topics';
-		var icon = sharedWithAiperion ? 'fa-users' : 'fa-desktop';
+		var categoryName = sharedWithAiperion ? 'Private channel to Aiperion' : ' Internal workspace forum';
+		var description = sharedWithAiperion ? 'The place to ask Aiperion for guidance privately.' : 'Private space for workspace users.';
+		var icon = sharedWithAiperion ? 'fa-sitemap' : 'fa-key';
 
 		var expectedCategoryData = {
 			name: categoryName,
 			description: description,
 			// slug: group.slug,
 			icon: icon,
-			bgColor: '#394B59',
+			bgColor: '#23A6EF',
 			private: true,
 		};
 		if (action === 'delete') {
