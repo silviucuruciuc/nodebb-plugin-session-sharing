@@ -654,19 +654,19 @@ plugin.appendTemplate = (data, callback) => {
 };
 
 plugin.updateGroup = function (groupName, callback, action) {
-	var sharedWithAiperianName = 'Private channel to Aiperion';
+	var sharedWithAiperianName = 'Private channel ' + groupName + ' - Aiperion';
 	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, false);
 	db.getObjectField('groupname:cid', sharedWithAiperianName, createCategoryForGroup);
 
 
-	var internalName = ' Internal workspace forum';
+	var internalName = 'Internal workspace forum';
 	var createCategoryForGroup = createCategory(groupName, action, createCategoryForGroup, true);
 	db.getObjectField('groupname:cid', internalName, createCategoryForGroup);
 };
 
 function createCategory(groupName, action, createCategoryForGroup, sharedWithAiperion) {
 	return function (err, cid) {
-		var categoryName = sharedWithAiperion ? 'Private channel to Aiperion' : ' Internal workspace forum';
+		var categoryName = sharedWithAiperion ? 'Private channel ' + groupName + ' - Aiperion' : ' Internal workspace forum';
 		var description = sharedWithAiperion ? 'The place to ask Aiperion for guidance privately.' : 'Private space for workspace users.';
 		var icon = sharedWithAiperion ? 'fa-sitemap' : 'fa-key';
 
