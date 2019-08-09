@@ -676,6 +676,7 @@ function createCategory(groupName, action, createCategoryForGroup, sharedWithAip
 			// slug: group.slug,
 			icon: icon,
 			bgColor: '#23A6EF',
+			color: '#ffffff',
 			private: true,
 		};
 		if (action === 'delete') {
