@@ -668,14 +668,16 @@ function createCategory(groupName, action, createCategoryForGroup, sharedWithAip
 	return function (err, cid) {
 		var categoryName = sharedWithAiperion ? 'Private channel ' + groupName + ' - Aiperion' : ' Internal workspace forum';
 		var description = sharedWithAiperion ? 'The place to ask Aiperion for guidance privately.' : 'Private space for workspace users.';
-		var icon = sharedWithAiperion ? 'fa-sitemap' : 'fa-key';
+		var icon = 'fa-nbb-none';
+		var imagePath = sharedWithAiperion ? '/forum/assets/uploads/system/Amprenta.svg' : '/forum/assets/uploads/system/Cheie.svg';
 
 		var expectedCategoryData = {
 			name: categoryName,
 			description: description,
 			// slug: group.slug,
 			icon: icon,
-			bgColor: '#23A6EF',
+			bgColor: '#0A2A35',
+			backgroundImage: imagePath,
 			color: '#ffffff',
 			private: true,
 		};
