@@ -712,6 +712,11 @@ function createCategory(groupName, action, createCategoryForGroup, sharedWithAip
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'registered-users');
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'spiders');
 				privileges.categories.rescind(defaultPrivileges, category.cid, 'guests');
+
+				if(sharedWithAiperion){
+					winston.verbose('[session-sharing] Subscribe Admin to private channel');
+					db.sortedSetAdd('cid:' + category.cid + ':subscribed:uids', Date.now(), 1);
+				}
 			});
 		} else {
 			expectedCategoryData.slug = undefined;

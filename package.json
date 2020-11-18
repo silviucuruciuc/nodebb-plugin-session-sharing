@@ -1,6 +1,6 @@
 {
   "name": "nodebb-plugin-session-sharing-custom",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Fork from nodebb-plugin-session-sharing",
   "main": "library.js",
   "repository": {
